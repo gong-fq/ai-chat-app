@@ -1,76 +1,123 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>DeepSeek Streaming Chat</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepSeek Chat (Memory Version)</title>
+
   <style>
-    body { font-family: Arial; max-width: 700px; margin: 40px auto; }
-    #chat { border: 1px solid #ccc; height: 400px; overflow-y: auto; padding: 10px; }
-    .user { color: blue; margin: 5px 0; }
-    .ai { color: green; margin: 5px 0; }
-    input { width: 75%; padding: 5px; }
-    button { padding: 5px 10px; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+    }
+
+    h2 {
+      text-align: center;
+    }
+
+    #chat {
+      border: 1px solid #ccc;
+      height: 400px;
+      overflow-y: auto;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    .user {
+      color: blue;
+      margin: 5px 0;
+    }
+
+    .ai {
+      color: green;
+      margin: 5px 0;
+    }
+
+    #input {
+      width: 75%;
+      padding: 6px;
+    }
+
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+    }
   </style>
 </head>
+
 <body>
 
-<h2>DeepSeek Chat (Streaming + Memory)</h2>
+<h2>DeepSeek Chat (Memory Enabled)</h2>
 
 <div id="chat"></div>
 
-<input id="input" placeholder="Type message..." />
+<input id="input" placeholder="Type your message..." />
 <button onclick="send()">Send</button>
 
 <script>
-let conversation = [
-  { role: "system", content: "You are a helpful assistant." }
-];
+  // 对话历史（核心：实现 memory）
+  let conversation = [
+    { role: "system", content: "You are a helpful assistant." }
+  ];
 
-const chatDiv = document.getElementById("chat");
+  const chatDiv = document.getElementById("chat");
 
-function addMessage(text, cls) {
-  const div = document.createElement("div");
-  div.className = cls;
-  div.textContent = text;
-  chatDiv.appendChild(div);
-  chatDiv.scrollTop = chatDiv.scrollHeight;
-  return div;
-}
-
-async function send() {
-  const input = document.getElementById("input");
-  const message = input.value;
-  if (!message) return;
-
-  conversation.push({ role: "user", content: message });
-  addMessage("You: " + message, "user");
-  input.value = "";
-
-  const aiDiv = addMessage("AI: ", "ai");
-
-  const response = await fetch("/.netlify/functions/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: conversation })
-  });
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-
-  let aiText = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value);
-    aiText += chunk;
-    aiDiv.textContent = "AI: " + aiText;
+  function addMessage(text, className) {
+    const div = document.createElement("div");
+    div.className = className;
+    div.textContent = text;
+    chatDiv.appendChild(div);
+    chatDiv.scrollTop = chatDiv.scrollHeight;
   }
 
-  conversation.push({ role: "assistant", content: aiText });
-}
+  async function send() {
+    const input = document.getElementById("input");
+    const message = input.value.trim();
+
+    if (!message) return;
+
+    // 显示用户消息
+    addMessage("You: " + message, "user");
+
+    // 加入历史
+    conversation.push({ role: "user", content: message });
+
+    input.value = "";
+
+    try {
+      const response = await fetch("/.netlify/functions/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ messages: conversation })
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        addMessage("Error: " + JSON.stringify(data.error), "ai");
+        return;
+      }
+
+      // 显示 AI 回复
+      addMessage("AI: " + data.reply, "ai");
+
+      // 保存到历史
+      conversation.push({ role: "assistant", content: data.reply });
+
+    } catch (err) {
+      addMessage("Network error: " + err.message, "ai");
+    }
+  }
+
+  // 支持回车发送
+  document.getElementById("input").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      send();
+    }
+  });
 </script>
 
 </body>
